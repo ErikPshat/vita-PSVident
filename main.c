@@ -34,6 +34,10 @@
 
 
 /* Changelog
+v0.26
+- removed GPU clock
+- added advanced Battery Info (disabled for PSTV now)
+
 v0.25
 - adjusted the font spacing for better readability
 - fixed Device detection for HENkaku v4
@@ -65,6 +69,12 @@ char svr[50];  //firmware
 int sceRegMgrGetKeyInt(const char* reg, const char* key, int* val);
 int sceRegMgrGetKeyStr(const char* reg, const char* key, char* str, const int buf_size);
 
+//! Battery
+int scePowerIsBatteryExist();
+int scePowerGetBatteryTemp();
+int scePowerGetBatteryVolt();
+int scePowerGetBatterySOH();
+
 //! Vita model
 int sceKernelGetModelForCDialog();
 
@@ -94,24 +104,6 @@ char *getCID() {
 	}
 	
 	return cid_string;
-}
-
-//! Visual ID
-int _vshSblAimgrGetVisibleId(char VID[20]);
-
-char *getVID() {
-	
-	int i;
-	char VID[20];
-	static char vid_string[20];
-	
-	_vshSblAimgrGetVisibleId(VID);
-
-	for (i = 0; i < 20; i++) {
-		sprintf(vid_string + strlen(vid_string), "%02X", VID[i]);
-	}
-	
-	return vid_string;
 }
 
 //! clock freq
@@ -432,6 +424,17 @@ char* batteryPercentage() {
 	return percentage;
 }
 
+char* getBatteryVoltage() {
+	static char voltage[8];
+	sprintf(voltage,"%0.2f",(float)scePowerGetBatteryVolt() / 1000.0);
+	return voltage;
+}
+
+char* getBatteryTemp() {
+	static char temp[8];
+	sprintf(temp,"%0.2f",(float)scePowerGetBatteryTemp() / 100.0);
+	return temp;
+}
 
 /********************* initiating NET Modules for MAC *********************************/
 
@@ -501,7 +504,7 @@ int main() {
 	psvDebugScreenInit();
 		
 	psvDebugScreenSetFgColor(GREEN);
-	printf("PSVident v0.25\n\n\n");
+	printf("PSVident v0.26\n\n\n");
 	
 	/////////////id.dat//////////////////
 	FILE* f1 = fopen("ux0:id.dat", "r");
@@ -538,8 +541,11 @@ int main() {
 	///ConsoleID / IDPS
 	printf("* IDPS:                 %s\n\n", getCID());
 	
-	///VisibleID
-	//printf("* Visible ID:           %s\n\n", getVID());
+	/*VisibleID
+	printf("* Visible ID:           %s\n", getVID());
+	///SMI
+	printf("* SMI:                  %s\n\n", getSMI());*/
+	
 	
 	///Hardware Info 1
 	/*printf("* Hardware Info 1       ");
@@ -574,38 +580,58 @@ int main() {
 	printf("* ");
 	psvDebugScreenSetFgColor(WHITE);
 	printf("BUS Clock frequency:  %d MHz\n", getClockFrequency(1));
-	psvDebugScreenSetFgColor(YELLOW);
+	/*psvDebugScreenSetFgColor(YELLOW);
 	printf("* ");
 	psvDebugScreenSetFgColor(WHITE);
-	printf("GPU Clock frequency:  %d MHz\n", getClockFrequency(2));
+	printf("GPU Clock frequency:  %d MHz\n", getClockFrequency(2));*/
 	
 	
-	printf("\n\nBattery\n\n");
 	
-	///Battery %
-	psvDebugScreenSetFgColor(RED);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("Battery percentage:   %s\n", batteryPercentage());	
+	if (scePowerIsBatteryExist()) {
+		printf("\n\nBattery\n\n");
 	
-	///Battery Capacity
-	psvDebugScreenSetFgColor(RED);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("Battery capacity:     %i/%i mAh\n", batteryRemCapacity(), batteryCapacity());
+		///Battery %
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery percentage:   %s\n", batteryPercentage());	
 	
-	///Battery is charging?
-	psvDebugScreenSetFgColor(RED);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("Battery status:       %s\n", batteryStatus());
+		///Battery Capacity
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery capacity:     %i/%i mAh\n", batteryRemCapacity(), batteryCapacity());
 	
-	///Battery Lifetime
-	psvDebugScreenSetFgColor(RED);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("Battery lifetime:     %i minutes\n", scePowerGetBatteryLifeTime());
+		///Battery is charging?
+		psvDebugScreenSetFgColor(RED);	
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery status:       %s\n", batteryStatus());
 	
+		///Battery Lifetime
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery lifetime:     %i minutes\n", scePowerGetBatteryLifeTime());
+		
+		///Battery Temperature
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery temperatur:   %s Celsius\n", getBatteryTemp());
+		
+		///Battery Voltage
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("Battery voltage:      %s Volt\n", getBatteryVoltage());
+		
+		///Battery State of Health
+		psvDebugScreenSetFgColor(RED);
+		printf("* ");
+		psvDebugScreenSetFgColor(WHITE);
+		printf("State of Health:      %i%%\n", scePowerGetBatterySOH());					
+	}
 
 	printf("\n\nRegistry/Settings\n\n");
 	
