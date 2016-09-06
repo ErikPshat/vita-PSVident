@@ -33,8 +33,8 @@
 
 /* Changelog
 v0.28
-- added fix for HENkaku font string format
-- Battery info will now show for Vitas only
+- added fix for HENkaku version string
+- battery info will now show for Vitas only
 - added controller_off_interval for PSTV
 - added detection of MemoryCard or Internal Memory
 - code cleaning
