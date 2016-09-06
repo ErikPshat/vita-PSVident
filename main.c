@@ -33,7 +33,7 @@
 
 /* Changelog
 v0.29
-- fixed temperature
+- fixed 'temperature' typo
 - added Fahrenheit version for US language setting
 
 v0.28
