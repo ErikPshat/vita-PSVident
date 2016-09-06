@@ -19,6 +19,9 @@ Color psvDebugScreenSetFgColor(Color color);
 // set background color
 Color psvDebugScreenSetBgColor(Color color);
 
+// printf to the screen with color
+void printf_color(const char *text, Color color);
+
 void *psvDebugScreenGetVram();
 int psvDebugScreenGetX();
 int psvDebugScreenGetY();

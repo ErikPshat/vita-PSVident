@@ -25,15 +25,20 @@
 
 /* TO DO
 - decrypt & read index.dat for real firmware (0x03600011)
-- fix HENkaku font string format
-- get region_no with registry functions??
-- add vshMemoryCardGetCardInsertState check & more error handling
-- screenshot
-- clean up
+- more and better error handling
+- screenshot feature?!
+- clean up this 'code'
 */
 
 
 /* Changelog
+v0.28
+- added fix for HENkaku font string format
+- Battery info will now show for Vitas only
+- added controller_off_interval for PSTV
+- added detection of MemoryCard or Internal Memory
+- code cleaning
+
 v0.26
 - removed GPU clock
 - added advanced Battery Info (disabled for PSTV now)
@@ -51,8 +56,8 @@ v0.2
 - code cleaning
 */
 
+
 //! for MAC
-static SceNetEtherAddr mac;
 static char mac_string[32];
 static void *net_memory = NULL;
 
@@ -87,6 +92,9 @@ typedef struct {
 } SceSystemSwVersionParam;
 int sceKernelGetSystemSwVersion(SceSystemSwVersionParam *param);
 
+//! Memory Card checks
+int vshMemoryCardGetCardInsertState();
+int vshRemovableMemoryGetCardInsertState();
 
 //! Console CID/IDPS
 int _vshSblAimgrGetConsoleId(char CID[16]);
@@ -126,7 +134,7 @@ int vshSblAimgrIsVITA();			//Vita Fat&Slim
 int vshSysconIsIduMode();			//is IDU device (not is in DEMO MODE currently!)
 int vshSysconIsShowMode();			//is in Show Mode
 	
-const char* mode() {
+const char* getMode() {
 	int cex = vshSblAimgrIsCEX();	
 	int dex = vshSblAimgrIsDEX();
 	//int test = vshSblAimgrIsTest(); /*testkits will show as DEX :/ */
@@ -260,7 +268,41 @@ const char* convert_model(int model) {
 	}
 }
 
-void convertdat(char* buff){
+
+
+/****************************** custom string functions ****************************************/
+char* stringReplace(char*, char*, char*);
+
+char* stringReplace(char *search, char *replace, char *string) {
+	char *tempString, *searchStart;
+	int len=0;
+
+	searchStart = strstr(string, search);
+	if(searchStart == NULL) {
+		return string;
+	}
+
+	tempString = (char*) malloc(strlen(string) * sizeof(char));
+	if(tempString == NULL) {
+		return NULL;
+	}
+
+	strcpy(tempString, string);
+
+	len = searchStart - string;
+	string[len] = '\0';
+
+	strcat(string, replace);
+
+	len += strlen(search);
+	strcat(string, (char*)tempString+len);
+
+	free(tempString);
+	
+	return string;
+}
+
+void convert_dat(char* buff){
 
 	char mid_string[] = "MID=";
 	char dig_string[] = "DIG=";
@@ -309,7 +351,7 @@ void convertdat(char* buff){
 		strncpy(svr, ptr, 50);		
 		
 	}else {
-		printf("ux0:id.dat wrongly formatted?\n"); 
+		printf_color("ux0:id.dat wrongly formatted?\n", RED); 
 	}
 }
 
@@ -362,7 +404,7 @@ char* getString( const char* reg, const char* key ) {
 
 
 ///read the region_no int by manually reading out system.dreg :/
-const char* get_region_no() {
+const char* getRegionNo() {
 	
 	FILE *fp = NULL;
     unsigned char hex[1024] = "";
@@ -400,25 +442,25 @@ const char* get_region_no() {
 
 /******************** Battery functions **********************************/
 
-const char* batteryStatus() {
+const char* getBatteryStatus() {
     if (!scePowerIsBatteryCharging()) return "In use";
     else return "Charging";
 }
 
-int batteryRemCapacity(){
+int getBatteryRemCapacity(){
 	char mAh[10];
 	sprintf(mAh,"%i",scePowerGetBatteryRemainCapacity());
 	int cap = atoi(mAh);	
 	return cap;
 }
-int batteryCapacity(){
+int getBatteryCapacity(){
 	char mAh[10];
 	sprintf(mAh,"%i",scePowerGetBatteryFullCapacity());
 	int cap = atoi(mAh);	
 	return cap;
 }
 
-char* batteryPercentage() {
+char* getBatteryPercentage() {
 	static char percentage[5];
 	sprintf(percentage, "%d%%", scePowerGetBatteryLifePercent());
 	return percentage;
@@ -473,56 +515,59 @@ int initnet(){
     }
     return 0;
 }
-/*char* getMac() {	
+
+char* getMac() {	
 	static SceNetEtherAddr mac;
-    static char mac_string[32];
-		
+    //static char mac_string[32];
 	sceNetGetMacAddress(&mac, 0);
 	
 	sprintf(mac_string, "%02X:%02X:%02X:%02X:%02X:%02X", mac.data[0], mac.data[1], mac.data[2], mac.data[3], mac.data[4], mac.data[5]);
 
     return mac_string;
-}*/
+}
 
+
+
+/********************* id.dat *********************************/
+void readIDDAT() {	
+	FILE* f1 = fopen("ux0:id.dat", "r");
+	
+	if (f1 == NULL){
+		printf_color("Error opening ux0:id.dat\n\n\n", RED);
+		
+		if (f1 != NULL) fclose(f1);
+	} else {
+		while (fscanf(f1, "%s", buff) == 1) { // expect 1 successful conversion
+			convert_dat(buff);
+		}	
+		fclose(f1);
+	}	
+}
+	
 /*****************************************************************************************************************************/
-
+	
 
 int main() {
 	
-	//init net & get mac
-	initnet();
-	sceNetGetMacAddress(&mac, 0);
-	sprintf(mac_string, "%02X:%02X:%02X:%02X:%02X:%02X", mac.data[0], mac.data[1], mac.data[2], mac.data[3], mac.data[4], mac.data[5]);
-
-	//init buttons
+	//initiate buttons
 	SceCtrlData pad;
 	SceCtrlData oldpad;
 	oldpad.buttons = 0;
 	memset(&pad, 0, sizeof(pad));
 	
-	//init screen
+	//initiate screen
 	psvDebugScreenInit();
+	psvDebugScreenSetFgColor(WHITE);	
+
+	printf_color("PSVident v0.28\n\n\n", GREEN);
 		
-	psvDebugScreenSetFgColor(GREEN);
-	printf("PSVident v0.26\n\n\n");
+	//initiate net & save mac in mac_string
+	initnet();
+	getMac();
 	
-	/////////////id.dat//////////////////
-	FILE* f1 = fopen("ux0:id.dat", "r");
-	
-	if (f1 == NULL){
-		psvDebugScreenSetFgColor(RED);
-		printf("Error opening ux0:id.dat\n\n\n");
-		
-		if (f1 != NULL) fclose(f1);
-	} else {
-		while (fscanf(f1, "%s", buff) == 1) { // expect 1 successful conversion
-			convertdat(buff);
-		}	
-		fclose(f1);
-	}	
-	psvDebugScreenSetFgColor(WHITE);		
-	/////////////////////////////////////
-	
+	//read ux0:id.dat and save content
+	readIDDAT();
+
 	
 	///Vita Model
 	printf("* Vita model:           %s", convert_model(sceKernelGetModelForCDialog()));
@@ -532,11 +577,19 @@ int main() {
 	SceSystemSwVersionParam sw_ver_param;
 	sw_ver_param.size = sizeof(SceSystemSwVersionParam);
 	sceKernelGetSystemSwVersion(&sw_ver_param);
-	printf("* Kernel version:       %s %s\n", sw_ver_param.version_string, mode());
+	
+		//HENkaku version string fix
+		if(strstr(sw_ver_param.version_string, "変革")) {
+			stringReplace(")(変革-", " HENkaku v", sw_ver_param.version_string);
+		}	
+	
+	
+	printf("* Kernel version:       %s %s\n", sw_ver_param.version_string, getMode());
 	printf("\n");
 	
 	///Mac Address
 	printf("* MAC address:          %s\n\n", mac_string);
+
 	
 	///ConsoleID / IDPS
 	printf("* IDPS:                 %s\n\n", getCID());
@@ -557,167 +610,138 @@ int main() {
 	getHardware2();
 	printf("\n\n");	*/
 	
-	///Memory Card data
-	uint64_t free_size = 0, max_size = 0;
-	sceAppMgrGetDevInfo("ux0:", &max_size, &free_size);
-	char free_size_string[16], max_size_string[16];
-		getSizeString(free_size_string, free_size);
-		getSizeString(max_size_string, max_size);
-	psvDebugScreenSetFgColor(GREY);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("MemoryCard:           %s / %s\n", free_size_string, max_size_string);
+	
+	///free space MemCard/Internal
+	if (vshMemoryCardGetCardInsertState()) {
+		uint64_t free_size = 0, max_size = 0;
+		sceAppMgrGetDevInfo("ux0:", &max_size, &free_size);
+		char free_size_string[16], max_size_string[16];
+			getSizeString(free_size_string, free_size);
+			getSizeString(max_size_string, max_size);
+		printf_color("* ", GREY);
 		
+		if (vshRemovableMemoryGetCardInsertState()) {
+			printf("MemoryCard:           %s / %s\n", free_size_string, max_size_string);
+		} else {
+			printf("Internal Memory:      %s / %s\n", free_size_string, max_size_string);
+		}
+	} else {
+		printf_color("Couldn't find a MemoryCard", RED);
+	}
+	
 	
 	printf("\n\nProcessor(s)\n\n");
 	
 	///Clock Speeds
-	psvDebugScreenSetFgColor(YELLOW);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", YELLOW);
 	printf("ARM Clock frequency:  %d MHz\n", getClockFrequency(0));
-	psvDebugScreenSetFgColor(YELLOW);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", YELLOW);
 	printf("BUS Clock frequency:  %d MHz\n", getClockFrequency(1));
-	/*psvDebugScreenSetFgColor(YELLOW);
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	/*printf_color("* ", YELLOW);
 	printf("GPU Clock frequency:  %d MHz\n", getClockFrequency(2));*/
 	
 	
 	
-	if (scePowerIsBatteryExist()) {
+	if (!vshSblAimgrIsDolce() & scePowerIsBatteryExist()) { //scePowerIsBatteryExist() actually doesn't make a difference between Vita/PSTV :|
 		printf("\n\nBattery\n\n");
 	
 		///Battery %
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
-		printf("Battery percentage:   %s\n", batteryPercentage());	
+		printf_color("* ", RED);
+		printf("Battery percentage:   %s\n", getBatteryPercentage());	
 	
 		///Battery Capacity
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
-		printf("Battery capacity:     %i/%i mAh\n", batteryRemCapacity(), batteryCapacity());
+		printf_color("* ", RED);
+		printf("Battery capacity:     %i/%i mAh\n", getBatteryRemCapacity(), getBatteryCapacity());
 	
 		///Battery is charging?
-		psvDebugScreenSetFgColor(RED);	
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
-		printf("Battery status:       %s\n", batteryStatus());
+		printf_color("* ", RED);
+		printf("Battery status:       %s\n", getBatteryStatus());
 	
 		///Battery Lifetime
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
+		printf_color("* ", RED);
 		printf("Battery lifetime:     %i minutes\n", scePowerGetBatteryLifeTime());
 		
 		///Battery Temperature
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
+		printf_color("* ", RED);
 		printf("Battery temperatur:   %s Celsius\n", getBatteryTemp());
 		
 		///Battery Voltage
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
+		printf_color("* ", RED);
 		printf("Battery voltage:      %s Volt\n", getBatteryVoltage());
 		
 		///Battery State of Health
-		psvDebugScreenSetFgColor(RED);
-		printf("* ");
-		psvDebugScreenSetFgColor(WHITE);
+		printf_color("* ", RED);
 		printf("State of Health:      %i%%\n", scePowerGetBatterySOH());					
 	}
 
 	printf("\n\nRegistry/Settings\n\n");
 	
 	///Registry: Vita username
-	/*psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	/*printf_color("* ", CYAN);
 	printf("username:             ");
 	printf("%s\n", getString("/CONFIG/SYSTEM", "username"));*/
 	
 	///Registry: button_assign
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", CYAN);
 	printf("button_assign:        ");
 	printf("%s\n", convert_button_assign(getInteger("/CONFIG/SYSTEM", "button_assign")));
 	
 	///Registry: language
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", CYAN);
 	printf("language:             ");
 	printf("%s\n", convert_language(getInteger("/CONFIG/SYSTEM", "language")));
 	
-	
 	///Registry: region_no
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", CYAN);
 	printf("region_no:            ");
-	printf("%s\n", get_region_no()); //reading manually from dreg
+	printf("%s\n", getRegionNo()); //reading manually from dreg
 
-	
 	///Registry: suspend_interval
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", CYAN);
 	printf("suspend_interval:     ");
 	printf("%i seconds\n", getInteger("/CONFIG/POWER_SAVING", "suspend_interval"));
 	
-	/*//Registry: Lockscreen Password
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("lockscreen passcode   ");
+	if ( vshSblAimgrIsDolce() ) {
+		///Registry: controller_off_interval
+		printf_color("* ", CYAN);
+		printf("contr_off_interval:   ");
+		printf("%i seconds\n", getInteger("/CONFIG/POWER_SAVING", "controller_off_interval"));	
+	}
+	
+	///Registry: Lockscreen Password
+	/*printf_color("* ", CYAN);
+	printf("lockscreen passcode:  ");
 	printf("%s\n", getString("/SECURITY/SCREEN_LOCK", "passcode"));
 	
 	///Registry: Parental Password
-	psvDebugScreenSetFgColor(CYAN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
-	printf("parental passcode     ");
+	printf_color("* ", CYAN);
+	printf("parental passcode:    ");
 	printf("%s\n", getString("/SECURITY/PARENTAL", "passcode"));*/
+	
+	
 	
 	printf("\n\nPSN Account\n\n");
 	
 	///id.dat: PSN Username
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("PSN Nickname:         %s\n", oid);
 	
 	///Registry: psn email login_id
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("E-Mail:               ");
 	printf("%s\n", getString("/CONFIG/NP", "login_id"));
 	
 	///Registry: psn account password
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("password:             ");
 	printf("%s\n", getString("/CONFIG/NP", "password"));
 	
 	///id.dat: PSID
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("PSID:                 %s\n", did);
 	
 	///id.dat: account_id 
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("account_id:           ");
 		//printf("%s\n", getBin("/CONFIG/NP", "account_id"));
 	int i; ///reading and inversing from id.dat
@@ -728,9 +752,7 @@ int main() {
 	
 	
 	///Registry: psn region
-	psvDebugScreenSetFgColor(GREEN);	
-	printf("* ");
-	psvDebugScreenSetFgColor(WHITE);
+	printf_color("* ", GREEN);
 	printf("region:               ");
 	printf("%s\n", getString("/CONFIG/NP", "country"));
 	

@@ -180,3 +180,9 @@ Color psvDebugScreenSetBgColor(Color color) {
 	g_bg_color = color;
 	return prev_color;
 }
+
+void printf_color(const char *text, Color color) {
+	psvDebugScreenSetFgColor(color);
+	psvDebugScreenPrintf(text);
+	psvDebugScreenSetFgColor(WHITE);
+}
