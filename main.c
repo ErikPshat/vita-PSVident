@@ -32,6 +32,10 @@
 
 
 /* Changelog
+v0.29
+- fixed temperature
+- added Fahrenheit version for US language setting
+
 v0.28
 - added fix for HENkaku version string
 - battery info will now show for Vitas only
@@ -472,9 +476,14 @@ char* getBatteryVoltage() {
 	return voltage;
 }
 
-char* getBatteryTemp() {
+char* getBatteryTempInCelsius() {
 	static char temp[8];
 	sprintf(temp,"%0.2f",(float)scePowerGetBatteryTemp() / 100.0);
+	return temp;
+}
+char* getBatteryTempInFahrenheit() {
+	static char temp[8];
+	sprintf(temp,"%0.2f",(1.8 * (float)scePowerGetBatteryTemp() / 100.0) + 32);
 	return temp;
 }
 
@@ -559,7 +568,7 @@ int main() {
 	psvDebugScreenInit();
 	psvDebugScreenSetFgColor(WHITE);	
 
-	printf_color("PSVident v0.28\n\n\n", GREEN);
+	printf_color("PSVident v0.29\n\n\n", GREEN);
 		
 	//initiate net & save mac in mac_string
 	initnet();
@@ -642,7 +651,7 @@ int main() {
 	
 	
 	
-	if (!vshSblAimgrIsDolce() & scePowerIsBatteryExist()) { //scePowerIsBatteryExist() actually doesn't make a difference between Vita/PSTV :|
+	if ( !vshSblAimgrIsDolce() ) { //scePowerIsBatteryExist() actually doesn't make a difference between Vita/PSTV :|
 		printf("\n\nBattery\n\n");
 	
 		///Battery %
@@ -663,8 +672,12 @@ int main() {
 		
 		///Battery Temperature
 		printf_color("* ", RED);
-		printf("Battery temperatur:   %s Celsius\n", getBatteryTemp());
-		
+		if ( getInteger("/CONFIG/SYSTEM", "language") == 1 ) {
+			printf("Battery temperature:  %s Fahrenheit\n", getBatteryTempInFahrenheit());
+		} else {
+			printf("Battery temperature:  %s Celsius\n", getBatteryTempInCelsius());
+		}		
+
 		///Battery Voltage
 		printf_color("* ", RED);
 		printf("Battery voltage:      %s Volt\n", getBatteryVoltage());
